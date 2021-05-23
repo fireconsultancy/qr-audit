@@ -7,6 +7,7 @@ from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QThread
 import numpy as np
 from pyzbar import pyzbar
 import time
+import textwrap
 
 found = 0
 filename = "flat1-kitchen"
@@ -41,14 +42,23 @@ class VideoThread(QThread):
 			n = len(hull)
 			# Draw the convext hull
 			for j in range(0,n):
-			  cv2.line(cv_img, hull[j], hull[ (j+1) % n], (255,0,0), 3)
+			  cv2.line(cv_img, hull[j], hull[ (j+1) % n], (0,102,255), 2)
 
-			x = decodedObject.rect.left
-			y = decodedObject.rect.top
-
-			font = cv2.FONT_HERSHEY_PLAIN
+			font = cv2.FONT_HERSHEY_DUPLEX
 			barCode = str(decodedObject.data)
-			cv2.putText(cv_img, barCode, (x, y-10), font, 1, (0,0,0), 2, cv2.LINE_AA)
+			trimmed_barcode = barCode[2:-1]
+			wrapped_barcode = textwrap.wrap(trimmed_barcode, width=30)
+
+			x=10
+			y=25
+			cv2.rectangle(cv_img, (0,0), (480,150), (255,255,255), -1)
+			for i, line in enumerate(wrapped_barcode):
+				textsize = cv2.getTextSize(line, font, 0.75,1)[0]
+				gap = textsize[1]+10
+
+				y = y + gap
+
+				cv2.putText(cv_img, line, (x, y), font,0.75,(0,0,0),1,lineType = cv2.LINE_AA)
 
 			if found == 1:
 				cv2.imwrite('export/' + filename  + '.png', cv_img)
