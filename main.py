@@ -1,68 +1,124 @@
-# import the necessary packages
-from imutils.video import VideoStream
-from pyzbar import pyzbar
-import argparse
-import datetime
-import imutils
-import time
+from PyQt5 import QtGui
+from PyQt5.QtWidgets import QWidget, QApplication, QLabel, QVBoxLayout
+from PyQt5.QtGui import QPixmap
+import sys
 import cv2
-# construct the argument parser and parse the arguments
-ap = argparse.ArgumentParser()
-ap.add_argument("-o", "--output", type=str, default="barcodes.csv",
-	help="path to output CSV file containing barcodes")
-args = vars(ap.parse_args())
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QThread
+import numpy as np
+from pyzbar import pyzbar
+import time
 
-# initialize the video stream and allow the camera sensor to warm up
-print("[INFO] starting video stream...")
-vs = VideoStream(usePiCamera=True).start()
-time.sleep(2.0)
-# open the output CSV file for writing and initialize the set of
-# QR codes found thus far
-csv = open(args["output"], "w")
-found = set()
+found = 0
+filename = "flat1-kitchen"
 
-# loop over the frames from the video stream
-while True:
-	# grab the frame from the threaded video stream and resize it to
-	# have a maximum width of 400 pixels
-	frame = vs.read()
-	frame = imutils.rotate(frame, 90)
-	frame = imutils.resize(frame, width=400)
-	# find the QR code in the frame and decode each of them
-	barcodes = pyzbar.decode(frame)
+class VideoThread(QThread):
+	change_pixmap_signal = pyqtSignal(np.ndarray)
 
-	# loop over the detected barcodes
-	for barcode in barcodes:
-		# extract the bounding box location of the barcode and draw
-		# the bounding box surrounding the barcode on the image
-		(x, y, w, h) = barcode.rect
-		cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-		# the barcode data is a bytes object so if we want to draw it
-		# on our output image we need to convert it to a string first
-		barcodeData = barcode.data.decode("utf-8")
-		barcodeType = barcode.type
-		# draw the barcode data and barcode type on the image
-		text = "{} ({})".format(barcodeData, barcodeType)
-		cv2.putText(frame, text, (x, y - 10),
-			cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-		# if the barcode text is currently not in our CSV file, write
-		# the timestamp + barcode to disk and update the set
-		if barcodeData not in found:
-			csv.write("{},{}\n".format(datetime.datetime.now(),
-				barcodeData))
-			csv.flush()
-			print("[EVENT] Found QR Code: " + barcodeData)
-			found.add(barcodeData)
+	def __init__(self):
+		super().__init__()
+		self._run_flag = True
 
-	# show the output frame
-	cv2.imshow("Barcode Scanner", frame)
-	key = cv2.waitKey(1) & 0xFF
+	def decode(self,cv_img):
+		decodedObjects = pyzbar.decode(cv_img)
+		for obj in decodedObjects:
+			print('Data : ', obj.data,'\n')
+		return decodedObjects
 
-	# if the `q` key was pressed, break from the loop
-	if key == ord("q"):
-		break
-# close the output CSV file do a bit of cleanup
-print("[INFO] cleaning up...")
-csv.close()
-cv2.destroyAllWindows()
-vs.stop()
+	def annotate(self,decodedObjects,cv_img):
+		global found
+		for decodedObject in decodedObjects:
+			found = 1;
+			points = decodedObject.polygon
+
+			# If the points do not form a quad, find convex hull
+			if len(points) > 4 :
+			  hull = cv2.convexHull(np.array([point for point in points], dtype=np.float32))
+			  hull = list(map(tuple, np.squeeze(hull)))
+			else :
+			  hull = points;
+
+			# Number of points in the convex hull
+			n = len(hull)
+			# Draw the convext hull
+			for j in range(0,n):
+			  cv2.line(cv_img, hull[j], hull[ (j+1) % n], (255,0,0), 3)
+
+			x = decodedObject.rect.left
+			y = decodedObject.rect.top
+
+			font = cv2.FONT_HERSHEY_PLAIN
+			barCode = str(decodedObject.data)
+			cv2.putText(cv_img, barCode, (x, y-10), font, 1, (0,0,0), 2, cv2.LINE_AA)
+
+			if found == 1:
+				cv2.imwrite('export/' + filename  + '.png', cv_img)
+				found = 2;
+
+	def run(self):
+		# capture from web cam
+		cap = cv2.VideoCapture(0)
+		while self._run_flag:
+			ret, cv_img = cap.read()
+			cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+			decodedObjects = self.decode(cv_img)
+			self.annotate(decodedObjects,cv_img)
+
+			if ret:
+				self.change_pixmap_signal.emit(cv_img)
+		# shut down capture system
+		cap.release()
+
+	def stop(self):
+		self._run_flag = False
+		self.wait()
+
+class App(QWidget):
+	def __init__(self):
+		super().__init__()
+		self.disply_width = 800
+		self.display_height = 480
+
+		#matches window size to display size
+		self.setFixedWidth(800)
+		self.setFixedHeight(480)
+
+		# create the label that holds the image
+		self.image_label = QLabel(self)
+		self.image_label.resize(480, 480)
+
+		# hide ui elements and fullscreen
+		self.showFullScreen()
+
+		# create the video capture thread
+		self.thread = VideoThread()
+		# connect its signal to the update_image slot
+		self.thread.change_pixmap_signal.connect(self.update_image)
+		# start the thread
+		self.thread.start()
+
+	def closeEvent(self, event):
+		self.thread.stop()
+		event.accept()
+
+	@pyqtSlot(np.ndarray)
+	def update_image(self, cv_img):
+
+		"""Updates the image_label with a new opencv image"""
+		qt_img = self.convert_cv_qt(cv_img)
+		self.image_label.setPixmap(qt_img)
+
+	def convert_cv_qt(self, cv_img):
+		"""Convert from an opencv image to QPixmap"""
+		rgb_image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+		h, w, ch = rgb_image.shape
+		bytes_per_line = ch * w
+		convert_to_Qt_format = QtGui.QImage(rgb_image.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
+		p = convert_to_Qt_format.scaled(self.disply_width, self.display_height, Qt.KeepAspectRatio)
+		return QPixmap.fromImage(p)
+
+if __name__=="__main__":
+	app = QApplication(sys.argv)
+	a = App()
+	a.show()
+	sys.exit(app.exec_())
