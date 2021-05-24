@@ -1,4 +1,5 @@
 from PyQt5 import QtGui
+from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import QWidget, QApplication, QLabel, QVBoxLayout
 from PyQt5.QtGui import QPixmap
 import sys
@@ -10,10 +11,11 @@ import time
 import textwrap
 
 found = 0
-filename = "flat1-kitchen"
+filename = "capture"
 
 class VideoThread(QThread):
 	change_pixmap_signal = pyqtSignal(np.ndarray)
+	UIready = pyqtSignal()
 
 	def __init__(self):
 		super().__init__()
@@ -26,9 +28,12 @@ class VideoThread(QThread):
 		return decodedObjects
 
 	def annotate(self,decodedObjects,cv_img):
-		global found
+		global found, filename
+
 		for decodedObject in decodedObjects:
-			found = 1;
+			if found==0:
+				found = 1;
+
 			points = decodedObject.polygon
 
 			# If the points do not form a quad, find convex hull
@@ -61,9 +66,11 @@ class VideoThread(QThread):
 				cv2.putText(cv_img, line, (x, y), font,0.75,(0,0,0),1,lineType = cv2.LINE_AA)
 
 			if found == 1:
+				filename=time.strftime("%Y%m%d-%H%M%S")
 				cv2.imwrite('export/' + filename  + '.png', cv_img)
-				found = 2;
-
+				print(filename)
+				found = 2
+				self.UIready.emit()
 	def run(self):
 		# capture from web cam
 		cap = cv2.VideoCapture(0)
@@ -97,6 +104,16 @@ class App(QWidget):
 		self.image_label = QLabel(self)
 		self.image_label.resize(480, 480)
 
+		# button to scan new code
+		self.btn_next = QtWidgets.QPushButton("Next Code", self)
+		self.btn_next.move(385,25)
+		self.btn_next.clicked.connect(self.nextCode)
+
+		# label to tell user that image is saved
+		self.lbl_saved = QtWidgets.QLabel("Scanning for QR Code", self)
+		self.lbl_saved.resize(415,25)
+		self.lbl_saved.move(390,75)
+
 		# hide ui elements and fullscreen
 		self.showFullScreen()
 
@@ -104,6 +121,7 @@ class App(QWidget):
 		self.thread = VideoThread()
 		# connect its signal to the update_image slot
 		self.thread.change_pixmap_signal.connect(self.update_image)
+		self.thread.UIready.connect(self.updateUI)
 		# start the thread
 		self.thread.start()
 
@@ -126,6 +144,16 @@ class App(QWidget):
 		convert_to_Qt_format = QtGui.QImage(rgb_image.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
 		p = convert_to_Qt_format.scaled(self.disply_width, self.display_height, Qt.KeepAspectRatio)
 		return QPixmap.fromImage(p)
+
+	@pyqtSlot()
+	def nextCode(self):
+		global found
+		found=0
+		print('[INFO] Ready for next code')
+
+	@pyqtSlot()
+	def updateUI(self):
+		self.lbl_saved.setText("Image Saved: " + filename)
 
 if __name__=="__main__":
 	app = QApplication(sys.argv)
