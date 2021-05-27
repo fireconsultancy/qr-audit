@@ -12,6 +12,7 @@ import textwrap
 
 found = 0
 filename = "capture"
+flat_number = 0
 
 class VideoThread(QThread):
 	change_pixmap_signal = pyqtSignal(np.ndarray)
@@ -66,7 +67,7 @@ class VideoThread(QThread):
 				cv2.putText(cv_img, line, (x, y), font,0.75,(0,0,0),1,lineType = cv2.LINE_AA)
 
 			if found == 1:
-				filename=time.strftime("%Y%m%d-%H%M%S")
+				filename=str(flat_number)+"_"+time.strftime("%H%M%S")
 				cv2.imwrite('export/' + filename  + '.png', cv_img)
 				print(filename)
 				found = 2
@@ -109,10 +110,37 @@ class App(QWidget):
 		self.btn_next.move(385,25)
 		self.btn_next.clicked.connect(self.nextCode)
 
+		# button to exit program
+		self.btn_exit = QtWidgets.QPushButton("Exit", self)
+		self.btn_exit.move(500,25)
+		self.btn_exit.clicked.connect(self.close)
+
+		# button to decrement flat number
+		self.btn_dec = QtWidgets.QPushButton("-",self)
+		self.btn_dec.move(650,134)
+		self.btn_dec.resize(25,25)
+		self.btn_dec.clicked.connect(self.decrement)
+
+		# button to increment flat number
+		self.btn_dec = QtWidgets.QPushButton("+",self)
+		self.btn_dec.move(750,134)
+		self.btn_dec.resize(25,25)
+		self.btn_dec.clicked.connect(self.increment)
+
+		# label to display flat number
+		self.lbl_flat = QtWidgets.QLabel("Flat 0", self)
+		self.lbl_flat.resize(60,25)
+		self.lbl_flat.move(680,134)
+
 		# label to tell user that image is saved
 		self.lbl_saved = QtWidgets.QLabel("Scanning for QR Code", self)
 		self.lbl_saved.resize(415,25)
 		self.lbl_saved.move(390,75)
+
+		# label to show most recent capture
+		self.lbl_image = QtWidgets.QLabel("most recent image", self)
+		self.lbl_image.resize(250,350)
+		self.lbl_image.move(390,125)
 
 		# hide ui elements and fullscreen
 		self.showFullScreen()
@@ -154,6 +182,22 @@ class App(QWidget):
 	@pyqtSlot()
 	def updateUI(self):
 		self.lbl_saved.setText("Image Saved: " + filename)
+
+		pixmap = QPixmap("export/" + filename + ".png")
+		smaller_pixmap = pixmap.scaled(250, 350, Qt.KeepAspectRatio, Qt.FastTransformation)
+		self.lbl_image.setPixmap(smaller_pixmap)
+
+	@pyqtSlot()
+	def decrement(self):
+		global flat_number
+		flat_number -= 1
+		self.lbl_flat.setText("Flat " + str(flat_number))
+
+	@pyqtSlot()
+	def increment(self):
+		global flat_number
+		flat_number += 1
+		self.lbl_flat.setText("Flat " + str(flat_number))
 
 if __name__=="__main__":
 	app = QApplication(sys.argv)
