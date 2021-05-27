@@ -9,10 +9,13 @@ import numpy as np
 from pyzbar import pyzbar
 import time
 import textwrap
+import csv
 
 found = 0
 filename = "capture"
 flat_number = 0
+starting = "undefined"
+ending = "undefined"
 
 class VideoThread(QThread):
 	change_pixmap_signal = pyqtSignal(np.ndarray)
@@ -47,11 +50,12 @@ class VideoThread(QThread):
 			# Number of points in the convex hull
 			n = len(hull)
 			# Draw the convext hull
-			for j in range(0,n):
-			  cv2.line(cv_img, hull[j], hull[ (j+1) % n], (0,102,255), 2)
+			#for j in range(0,n):
+			#  cv2.line(cv_img, hull[j], hull[ (j+1) % n], (0,102,255), 2)
 
 			font = cv2.FONT_HERSHEY_DUPLEX
 			barCode = str(decodedObject.data)
+
 			trimmed_barcode = barCode[2:-1]
 			wrapped_barcode = textwrap.wrap(trimmed_barcode, width=30)
 
@@ -67,9 +71,13 @@ class VideoThread(QThread):
 				cv2.putText(cv_img, line, (x, y), font,0.75,(0,0,0),1,lineType = cv2.LINE_AA)
 
 			if found == 1:
-				filename=str(flat_number)+"_"+time.strftime("%H%M%S")
+				filename=str(flat_number)+"_"+starting+"_"+ending+"_"+time.strftime("%H%M%S")
 				cv2.imwrite('export/' + filename  + '.png', cv_img)
 				print(filename)
+				csv = open("qr_codes.csv","a")
+				csv.write(filename + ", " + trimmed_barcode + "\n")
+				csv.flush()
+				csv.close()
 				found = 2
 				self.UIready.emit()
 	def run(self):
@@ -127,6 +135,30 @@ class App(QWidget):
 		self.btn_dec.resize(25,25)
 		self.btn_dec.clicked.connect(self.increment)
 
+		# combobox for starting location
+		self.combo_starting = QtWidgets.QComboBox(self)
+		self.combo_starting.addItems(["Unknown","Hall","Kitchen","Bedroom1","Bedroom2","Bedroom3","Bathroom1","Bathroom2","Living Room","Cupboard1","Cupboard2","Other1","Other2","Other3"])
+		self.combo_starting.move(650,200)
+		self.combo_starting.resize(140,25)
+		self.combo_starting.currentIndexChanged.connect(self.startingchange)
+
+		# combobox for ending location
+		self.combo_ending = QtWidgets.QComboBox(self)
+		self.combo_ending.addItems(["Unknown","Hall","Kitchen","Bedroom1","Bedroom2","Bedroom3","Bathroom1","Bathroom2","Living Room","Cupboard1","Cupboard2","Other1","Other2","Other3"])
+		self.combo_ending.move(650,250)
+		self.combo_ending.resize(140,25)
+		self.combo_ending.currentIndexChanged.connect(self.endingchange)
+
+		# label to display starting location
+		self.lbl_starting = QtWidgets.QLabel("Starting",self)
+		self.lbl_starting.resize(60,25)
+		self.lbl_starting.move(650,175)
+
+		# label to display ending location
+		self.lbl_ending = QtWidgets.QLabel("Ending",self)
+		self.lbl_ending.resize(60,25)
+		self.lbl_ending.move(650,225)
+
 		# label to display flat number
 		self.lbl_flat = QtWidgets.QLabel("Flat 0", self)
 		self.lbl_flat.resize(60,25)
@@ -141,6 +173,16 @@ class App(QWidget):
 		self.lbl_image = QtWidgets.QLabel("most recent image", self)
 		self.lbl_image.resize(250,350)
 		self.lbl_image.move(390,125)
+
+		# branding
+		self.lbl_branding = QtWidgets.QLabel("Swan Media Ltd.",self)
+		self.lbl_branding.resize(150,150)
+		self.lbl_branding.move(650,322)
+		pixmap2 = QPixmap('logo.png')
+		smaller_pixmap2 = pixmap2.scaled(140, 140, Qt.KeepAspectRatio)
+		self.lbl_branding.setPixmap(smaller_pixmap2)
+
+		# create csv file
 
 		# hide ui elements and fullscreen
 		self.showFullScreen()
@@ -198,6 +240,16 @@ class App(QWidget):
 		global flat_number
 		flat_number += 1
 		self.lbl_flat.setText("Flat " + str(flat_number))
+
+	@pyqtSlot()
+	def startingchange(self):
+		global starting
+		starting = str(self.combo_starting.currentText())
+
+	@pyqtSlot()
+	def endingchange(self):
+		global ending
+		ending = str(self.combo_ending.currentText())
 
 if __name__=="__main__":
 	app = QApplication(sys.argv)
