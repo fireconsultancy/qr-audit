@@ -16,6 +16,7 @@ filename = "capture"
 flat_number = 0
 starting = "undefined"
 ending = "undefined"
+building = "undefined"
 
 class VideoThread(QThread):
 	change_pixmap_signal = pyqtSignal(np.ndarray)
@@ -57,7 +58,8 @@ class VideoThread(QThread):
 			barCode = str(decodedObject.data)
 
 			trimmed_barcode = barCode[2:-1]
-			wrapped_barcode = textwrap.wrap(trimmed_barcode, width=30)
+			full_text = trimmed_barcode + " " + str(building) + ", flat " + str(flat_number) + ", from " + starting + " to " + ending
+			wrapped_barcode = textwrap.wrap(full_text, width=30)
 
 			x=10
 			y=25
@@ -71,7 +73,7 @@ class VideoThread(QThread):
 				cv2.putText(cv_img, line, (x, y), font,0.75,(0,0,0),1,lineType = cv2.LINE_AA)
 
 			if found == 1:
-				filename=str(flat_number)+"_"+starting+"_"+ending+"_"+time.strftime("%H%M%S")
+				filename=str(building)+"_"+str(flat_number)+"_"+starting+"_"+ending+"_"+time.strftime("%H%M%S")
 				cv2.imwrite('export/' + filename  + '.png', cv_img)
 				print(filename)
 				csv = open("qr_codes.csv","a")
@@ -149,6 +151,13 @@ class App(QWidget):
 		self.combo_ending.resize(140,25)
 		self.combo_ending.currentIndexChanged.connect(self.endingchange)
 
+		# combobox for building name
+		self.combo_building = QtWidgets.QComboBox(self)
+		self.combo_building.addItems(["Unknown","Meridian Bay SGB","Meridian Bay Tower1","Meridian Wharf A", "Meridian Bay Tower2"])
+		self.combo_building.move(650,300)
+		self.combo_building.resize(140,25)
+		self.combo_building.currentIndexChanged.connect(self.buildingchange)
+
 		# label to display starting location
 		self.lbl_starting = QtWidgets.QLabel("Starting",self)
 		self.lbl_starting.resize(60,25)
@@ -158,6 +167,11 @@ class App(QWidget):
 		self.lbl_ending = QtWidgets.QLabel("Ending",self)
 		self.lbl_ending.resize(60,25)
 		self.lbl_ending.move(650,225)
+
+		# lbael to display building
+		self.lbl_building = QtWidgets.QLabel("Building",self)
+		self.lbl_building.resize(60,25)
+		self.lbl_building.move(650,275)
 
 		# label to display flat number
 		self.lbl_flat = QtWidgets.QLabel("Flat 0", self)
@@ -223,7 +237,7 @@ class App(QWidget):
 
 	@pyqtSlot()
 	def updateUI(self):
-		self.lbl_saved.setText("Image Saved: " + filename)
+		self.lbl_saved.setText(filename)
 
 		pixmap = QPixmap("export/" + filename + ".png")
 		smaller_pixmap = pixmap.scaled(250, 350, Qt.KeepAspectRatio, Qt.FastTransformation)
@@ -250,6 +264,11 @@ class App(QWidget):
 	def endingchange(self):
 		global ending
 		ending = str(self.combo_ending.currentText())
+
+	@pyqtSlot()
+	def buildingchange(self):
+		global building
+		building = str(self.combo_building.currentText())
 
 if __name__=="__main__":
 	app = QApplication(sys.argv)
