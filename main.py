@@ -17,6 +17,8 @@ flat_number = 0
 starting = "undefined"
 ending = "undefined"
 building = "undefined"
+capture = 0
+recording = 0
 
 class VideoThread(QThread):
 	change_pixmap_signal = pyqtSignal(np.ndarray)
@@ -83,14 +85,42 @@ class VideoThread(QThread):
 				found = 2
 				self.UIready.emit()
 	def run(self):
+		global capture
+		global filename
+		global recording
 		# capture from web cam
 		cap = cv2.VideoCapture(0)
+		rec_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+		rec_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
 		while self._run_flag:
 			ret, cv_img = cap.read()
 			cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
+			if capture == 1:
+				filename=str(building)+"_"+str(flat_number)+"_"+starting+"_"+ending+"_"+time.strftime("%H%M%S")+"_NoScan"
+				cv2.imwrite('export/' + filename  + '.png', cv_img)
+				print(filename)
+				csv = open("qr_codes.csv","a")
+				csv.write(filename + ", " + "NoScan" + "\n")
+				csv.flush()
+				csv.close()
+				self.UIready.emit()
+				capture = 0
+
 			decodedObjects = self.decode(cv_img)
 			self.annotate(decodedObjects,cv_img)
+
+			if recording == 1:
+				recording = 2
+				writer = cv2.VideoWriter(str("export/"+building)+"_"+str(flat_number)+"_"+starting+"_"+ending+"_"+time.strftime("%H%M%S")+".avi", cv2.VideoWriter_fourcc(*'DIVX'), 13, (rec_height,rec_width))
+				print("starting recording")
+			if recording == 3:
+				writer.release()
+				recording = 0
+				print("recording saved")
+			if recording == 2:
+				writer.write(cv_img)
 
 			if ret:
 				self.change_pixmap_signal.emit(cv_img)
@@ -118,12 +148,26 @@ class App(QWidget):
 		# button to scan new code
 		self.btn_next = QtWidgets.QPushButton("Next Code", self)
 		self.btn_next.move(385,25)
+		self.btn_next.resize(100,50)
 		self.btn_next.clicked.connect(self.nextCode)
+
+		# button to take picture without code scanned
+		self.btn_capture = QtWidgets.QPushButton("Capture",self)
+		self.btn_capture.move(500,25)
+		self.btn_capture.resize(100,50)
+		self.btn_capture.clicked.connect(self.captureCode)
 
 		# button to exit program
 		self.btn_exit = QtWidgets.QPushButton("Exit", self)
-		self.btn_exit.move(500,25)
+		self.btn_exit.move(615,25)
+		self.btn_exit.resize(100,50)
 		self.btn_exit.clicked.connect(self.close)
+
+		# button to start / stop recording
+		self.btn_rec = QtWidgets.QPushButton("Start Recording",self)
+		self.btn_rec.move(650,85)
+		self.btn_rec.resize(140,35)
+		self.btn_rec.clicked.connect(self.record)
 
 		# button to decrement flat number
 		self.btn_dec = QtWidgets.QPushButton("-",self)
@@ -179,9 +223,9 @@ class App(QWidget):
 		self.lbl_flat.move(680,134)
 
 		# label to tell user that image is saved
-		self.lbl_saved = QtWidgets.QLabel("Scanning for QR Code", self)
-		self.lbl_saved.resize(415,25)
-		self.lbl_saved.move(390,75)
+#		self.lbl_saved = QtWidgets.QLabel("Scanning for QR Code", self)
+#		self.lbl_saved.resize(415,25)
+#		self.lbl_saved.move(390,75)
 
 		# label to show most recent capture
 		self.lbl_image = QtWidgets.QLabel("most recent image", self)
@@ -237,7 +281,7 @@ class App(QWidget):
 
 	@pyqtSlot()
 	def updateUI(self):
-		self.lbl_saved.setText(filename)
+#		self.lbl_saved.setText(filename)
 
 		pixmap = QPixmap("export/" + filename + ".png")
 		smaller_pixmap = pixmap.scaled(250, 350, Qt.KeepAspectRatio, Qt.FastTransformation)
@@ -269,6 +313,31 @@ class App(QWidget):
 	def buildingchange(self):
 		global building
 		building = str(self.combo_building.currentText())
+
+	@pyqtSlot()
+	def captureCode(self):
+		global capture
+		capture = 1
+#		filename=str(building)+"_"+str(flat_number)+"_"+starting+"_"+ending+"_"+time.strftime("%H%M%S")+"_NoScan"
+#		cv2.imwrite('export/' + filename  + '.png', cv_img)
+#		print(filename)
+#		csv = open("qr_codes.csv","a")
+#		csv.write(filename + ", " + trimmed_barcode + "\n")
+#		csv.flush()
+#		csv.close()
+#		self.UIready()
+
+	@pyqtSlot()
+	def record(self):
+		global recording
+
+		if recording == 0:
+			recording = 1
+			self.btn_rec.setText("Stop Recording")
+		else:
+			recording = 3
+			self.btn_rec.setText("Start Recording")
+
 
 if __name__=="__main__":
 	app = QApplication(sys.argv)
